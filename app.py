@@ -2,19 +2,65 @@ import csv
 import io
 import re
 
+import extra_streamlit_components as stx
 import requests
 import streamlit as st
 
 st.set_page_config(page_title="Scopus 論文情報取得ツール", layout="wide")
+
+# --- Cookie管理 ---
+cookie_manager = stx.CookieManager()
+
+# --- パスワード認証 ---
+APP_PASSWORD = st.secrets.get("APP_PASSWORD", "")
+
+
+def check_auth():
+    """パスワード認証。Cookie記憶あり。"""
+    if not APP_PASSWORD:
+        return True  # パスワード未設定なら認証スキップ
+
+    # session_stateまたはCookieで認証済みならスキップ
+    if st.session_state.get("authenticated"):
+        return True
+    auth_cookie = cookie_manager.get("authenticated")
+    if auth_cookie == "true":
+        st.session_state["authenticated"] = True
+        return True
+
+    col, _ = st.columns([1, 2])
+    with col:
+        password = st.text_input("パスワードを入力してください", type="password")
+        st.button("ログイン", type="primary")
+    if not password:
+        st.stop()
+    if password != APP_PASSWORD:
+        st.error("パスワードが正しくありません。")
+        st.stop()
+
+    st.session_state["authenticated"] = True
+    cookie_manager.set("authenticated", "true", key="set_auth", max_age=365 * 24 * 60 * 60)
+    st.rerun()
+
+
+check_auth()
+
 st.title("Scopus 論文情報取得ツール")
 st.caption("研究者のScopus Author IDから論文情報とCiteScoreパーセンタイルを取得します")
 
 # --- サイドバー：APIキー入力 ---
+saved_api_key = cookie_manager.get("scopus_api_key") or ""
+
 api_key = st.sidebar.text_input(
     "Scopus APIキー",
+    value=saved_api_key,
     type="password",
     help="Elsevier Developer Portalで取得したAPIキーを入力してください",
 )
+
+# APIキーが変更されたら自動保存
+if api_key and api_key != saved_api_key:
+    cookie_manager.set("scopus_api_key", api_key, key="set_api_key", max_age=365 * 24 * 60 * 60)
 
 # --- 研究者ID入力 ---
 raw_input = st.text_area(
@@ -108,7 +154,7 @@ def get_researcher_publications(researcher_id: str, headers: dict, max_results: 
 
 
 # --- 実行ボタン ---
-if st.button("論文情報を取得", type="primary"):
+if st.button("論文情報を取得", type="primary"):  # テーマカラー（オレンジ）
     if not api_key:
         st.error("サイドバーでScopus APIキーを入力してください。")
         st.stop()
