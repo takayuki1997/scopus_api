@@ -1,11 +1,18 @@
 # Scopus 論文情報取得ツール
 
+## ユーザー情報
+- Scopus Author ID: 57218980100 (Takayuki Sato)
+
+## 研究者名の取得
+- Author Retrieval API (`/content/author/author_id/{scopus_id}`) で取得可能（2026-03-13 確認済み）
+- レスポンスの `author-profile.preferred-name` から `given-name`, `surname`, `indexed-name` を取得
+- 以前発生していた 401 Unauthorized エラーは解消済み
+
 ## 今後の課題
 
-### 研究者名の取得
-- Author Retrieval API (`/content/author/author_id/`) と Author Search API (`/content/search/author`) の両方で 401 Unauthorized エラーが発生
-- APIキーの権限問題の可能性。Elsevier側の仕様変更や一時的制限かもしれない
-- 代替案: 論文検索結果の `dc:creator` フィールドから取得可能だが、第一著者でない論文では別人の名前になる制約がある
+### 著者名のローカルキャッシュ
+- `author_cache.json` に著者ID→名前のマッピングを保存し、APIコール数を削減する案
+- 検索時にまずキャッシュを参照し、未登録のIDだけAPIに問い合わせる
 
 ### FWCI (Field Weighted Citation Impact)
 - Scopus APIでは取得不可。SciVal APIが必要だが、SciValの契約がない
