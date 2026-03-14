@@ -51,18 +51,32 @@ if not check_auth():
 if not cookies.get("authenticated"):
     cookies.set("authenticated", "true", max_age=365 * 24 * 60 * 60)
 
-st.title("Scopus 論文情報取得ツール")
+col_title, col_settings = st.columns([8, 1])
+with col_title:
+    st.title("Scopus 論文情報取得ツール")
 st.caption("研究者のScopus Author IDから論文情報とCiteScoreパーセンタイルを取得します")
 
-# --- サイドバー：APIキー入力 ---
+# --- APIキー入力 ---
 saved_api_key = cookies.get("scopus_api_key") or ""
 
-api_key = st.sidebar.text_input(
-    "Scopus APIキー",
-    value=saved_api_key,
-    type="password",
-    help="Elsevier Developer Portalで取得したAPIキーを入力してください",
-)
+if saved_api_key:
+    # APIキー入力済み → ポップアップに収める
+    with col_settings:
+        st.write("")  # タイトルとの高さ合わせ
+        with st.popover("⚙️"):
+            api_key = st.text_input(
+                "Scopus APIキー",
+                value=saved_api_key,
+                type="password",
+                help="Elsevier Developer Portalで取得したAPIキーを入力してください",
+            )
+else:
+    # APIキー未入力 → 直接表示して入力を促す
+    api_key = st.text_input(
+        "Scopus APIキー",
+        type="password",
+        help="Elsevier Developer Portalで取得したAPIキーを入力してください",
+    )
 
 # APIキーが変更されたら自動保存
 if api_key and api_key != saved_api_key:
