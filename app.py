@@ -16,32 +16,40 @@ APP_PASSWORD = st.secrets.get("APP_PASSWORD", "")
 
 
 def check_auth():
-    """パスワード認証。Cookie記憶あり。"""
+    """認証状態を確認する（UIは描画しない）。"""
     if not APP_PASSWORD:
         return True
-
     if st.session_state.get("authenticated"):
         return True
-    if cookies.get("authenticated") == "true":
+    # Cookieコンポーネントの初期化を待つ
+    # getAll() は None → {} → 完全なデータ と段階的に返る場合がある
+    all_cookies = cookies.getAll()
+    if not st.session_state.get("cookies_ready"):
+        if not all_cookies:
+            st.spinner("読み込み中...")
+            st.stop()
+        st.session_state["cookies_ready"] = True
+    if all_cookies and all_cookies.get("authenticated"):
         st.session_state["authenticated"] = True
         return True
+    return False
 
+
+if not check_auth():
     col, _ = st.columns([1, 2])
     with col:
         password = st.text_input("パスワードを入力してください", type="password")
-        st.button("ログイン", type="primary")
-    if not password:
-        st.stop()
-    if password != APP_PASSWORD:
-        st.error("パスワードが正しくありません。")
-        st.stop()
+        if st.button("ログイン", type="primary"):
+            if password == APP_PASSWORD:
+                st.session_state["authenticated"] = True
+                st.rerun()
+            elif password:
+                st.error("パスワードが正しくありません。")
+    st.stop()
 
-    st.session_state["authenticated"] = True
+# 認証済み: Cookieが未保存なら保存（rerun後なのでJSが正常に実行される）
+if not cookies.get("authenticated"):
     cookies.set("authenticated", "true", max_age=365 * 24 * 60 * 60)
-    st.rerun()
-
-
-check_auth()
 
 st.title("Scopus 論文情報取得ツール")
 st.caption("研究者のScopus Author IDから論文情報とCiteScoreパーセンタイルを取得します")
