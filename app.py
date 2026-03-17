@@ -83,6 +83,10 @@ if api_key and api_key != saved_api_key:
     cookies.set("scopus_api_key", api_key, max_age=365 * 24 * 60 * 60)
 
 # --- 研究者ID入力 ---
+st.markdown(
+    "<style>[data-testid='stTextArea'] { max-width: 400px; }</style>",
+    unsafe_allow_html=True,
+)
 raw_input = st.text_area(
     "Scopus Author ID（複数可：改行またはカンマ区切り）",
     placeholder="57218980100\n12345678901",
