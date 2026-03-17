@@ -77,6 +77,14 @@ else:
         type="password",
         help="Elsevier Developer Portalで取得したAPIキーを入力してください",
     )
+    st.caption(
+        "APIキーは [Elsevier Developer Portal](https://dev.elsevier.com/) で"
+        "無料アカウントを作成し取得できます  \n"
+        "1. 上記リンクからサイトにアクセスし「Register」から無料アカウントを作成  \n"
+        "2. ログイン後「My API Key」→「Create API Key」をクリック  \n"
+        "3. Label（任意の名前）とWebsite（個人サイトがなければ http://example.com で可）を入力  \n"
+        "4. 表示されたAPIキーをコピーして上の入力欄に貼り付け"
+    )
 
 # APIキーが変更されたら自動保存
 if api_key and api_key != saved_api_key:
