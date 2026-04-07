@@ -81,11 +81,12 @@ else:
     )
     st.caption(
         "APIキーは [Elsevier Developer Portal](https://dev.elsevier.com/) で"
-        "無料アカウントを作成し取得できます  \n"
-        "1. 上記リンクからサイトにアクセスし「Register」から無料アカウントを作成  \n"
-        "2. ログイン後「My API Key」→「Create API Key」をクリック  \n"
-        "3. Label（任意の名前）を入力（Websiteは空欄で可）  \n"
-        "4. 表示されたAPIキーをコピーして上の入力欄に貼り付け"
+        "無料取得できます  \n"
+        "1. 上記リンクから「I want an API Key」をクリック  \n"
+        "2. ログイン（アカウントがない場合は無料で作成）  \n"
+        "3. 「Create API Key」をクリック  \n"
+        "4. Label（任意の名前）を入力（Websiteは空欄で可）  \n"
+        "5. 表示されたAPIキーをコピーして上の入力欄に貼り付け"
     )
 
 # APIキーが変更されたら自動保存
