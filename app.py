@@ -63,7 +63,8 @@ if saved_api_key:
     # APIキー入力済み → ポップアップに収める
     with col_settings:
         st.write("")  # タイトルとの高さ合わせ
-        with st.popover("⚙️"):
+        with st.popover("⚙️", use_container_width=False):
+            st.markdown("<style>[data-testid='stPopover'] [data-testid='stPopoverBody'] { min-width: 400px; }</style>", unsafe_allow_html=True)
             api_key = st.text_input(
                 "Scopus APIキー",
                 value=saved_api_key,
