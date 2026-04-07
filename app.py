@@ -78,7 +78,6 @@ else:
     api_key = st.text_input(
         "Scopus APIキー",
         type="password",
-        help="Elsevier Developer Portalで取得したAPIキーを入力してください",
     )
     st.caption(
         "APIキーは [Elsevier Developer Portal](https://dev.elsevier.com/) で"
