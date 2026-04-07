@@ -85,7 +85,7 @@ else:
         "無料アカウントを作成し取得できます  \n"
         "1. 上記リンクからサイトにアクセスし「Register」から無料アカウントを作成  \n"
         "2. ログイン後「My API Key」→「Create API Key」をクリック  \n"
-        "3. Label（任意の名前）とWebsite（個人サイトがなければ http://example.com で可）を入力  \n"
+        "3. Label（任意の名前）を入力（Websiteは空欄で可）  \n"
         "4. 表示されたAPIキーをコピーして上の入力欄に貼り付け"
     )
 
