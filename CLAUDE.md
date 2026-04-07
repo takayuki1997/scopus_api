@@ -7,10 +7,9 @@
 ## ユーザー情報
 - Scopus Author ID: 57218980100 (Takayuki Sato)
 
-## InstToken
-- InstToken取得済み（2026-03-17）。`st.secrets["SCOPUS_INSTTOKEN"]` から読み込み、`X-ELS-Insttoken` ヘッダーとして送信
-- InstTokenの規約: サーバーサイドのみ、ブラウザ側コード・URLバーに露出禁止、HTTPS必須、予告なく失効の可能性あり
-- 個人キーにInstTokenを付けると401になる（2026-03-30 検証済み）。現在のコードは常にInstTokenを付与するため、個人キーでは動作しない
+## APIキー
+- 個人キー（Elsevier Developer Portalで無料取得）のみ対応
+- InstTokenは削除済み（著者名取得廃止により不要になった）
 
 ## 今後の課題
 
