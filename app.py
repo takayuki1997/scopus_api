@@ -102,6 +102,7 @@ raw_input = st.text_area(
     "Scopus Author ID（複数可：改行またはカンマ区切り）",
     placeholder="57218980100\n12345678901",
     height=150,
+    help="Scopus Author IDは [Scopusの著者検索](https://www.scopus.com/pages/home#author) で調べられます",
 )
 
 # --- 定数 ---
