@@ -71,6 +71,9 @@ if saved_api_key:
                 type="password",
                 help="Elsevier Developer Portalで取得したAPIキーを入力してください",
             )
+            st.caption(
+                "APIキーは [Elsevier Developer Portal](https://dev.elsevier.com/) で取得できます"
+            )
 else:
     # APIキー未入力 → 直接表示して入力を促す
     api_key = st.text_input(
