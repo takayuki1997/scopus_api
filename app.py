@@ -160,7 +160,7 @@ def get_journal_citescore(source_id: str, headers: dict, cache: dict) -> dict:
 def get_researcher_publications(
     researcher_id: str,
     headers: dict,
-    max_results: int = 500,
+    max_results: int = 1000,
     progress_callback=None,
 ) -> list[dict]:
     results = []
