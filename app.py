@@ -157,10 +157,16 @@ def get_journal_citescore(source_id: str, headers: dict, cache: dict) -> dict:
         return {}
 
 
-def get_researcher_publications(researcher_id: str, headers: dict, max_results: int = 100) -> list[dict]:
+def get_researcher_publications(
+    researcher_id: str,
+    headers: dict,
+    max_results: int = 500,
+    progress_callback=None,
+) -> list[dict]:
     results = []
     start = 0
     count_per_request = 25
+    total_results = None
 
     while start < max_results:
         params = {
@@ -171,7 +177,13 @@ def get_researcher_publications(researcher_id: str, headers: dict, max_results: 
         }
         resp = requests.get(BASE_URL, headers=headers, params=params, timeout=30)
         resp.raise_for_status()
-        entries = resp.json().get("search-results", {}).get("entry", [])
+        search_results = resp.json().get("search-results", {})
+        if total_results is None:
+            try:
+                total_results = min(int(search_results.get("opensearch:totalResults", 0)), max_results)
+            except (TypeError, ValueError):
+                total_results = max_results
+        entries = search_results.get("entry", [])
         if not entries:
             break
 
@@ -192,6 +204,8 @@ def get_researcher_publications(researcher_id: str, headers: dict, max_results: 
                 "citation_count": entry.get("citedby-count", "0"),
             })
         start += len(entries)
+        if progress_callback and total_results:
+            progress_callback(min(len(results), total_results), total_results)
         if len(entries) < count_per_request:
             break
 
@@ -215,19 +229,42 @@ if st.button("論文情報を取得", type="primary"):  # テーマカラー（�
 
     progress_bar = st.progress(0, text="論文情報を取得中...")
 
+    n_researchers = len(researcher_ids)
+
     for idx, researcher_id in enumerate(researcher_ids):
+        base_ratio = idx / n_researchers
+        # 1人あたりの進捗を「論文取得 70% + CiteScore取得 30%」で配分
+        fetch_share = 0.7 / n_researchers
+        citescore_share = 0.3 / n_researchers
+
+        def update_fetch_progress(done: int, total: int, rid=researcher_id, base=base_ratio, share=fetch_share):
+            ratio = base + share * (done / total if total else 1.0)
+            progress_bar.progress(
+                min(ratio, 1.0),
+                text=f"[{idx + 1}/{n_researchers}] 研究者 {rid}: 論文情報を取得中 ({done}/{total})",
+            )
+
         progress_bar.progress(
-            idx / len(researcher_ids),
-            text=f"研究者 {researcher_id} の情報を取得中... ({idx + 1}/{len(researcher_ids)})",
+            base_ratio,
+            text=f"[{idx + 1}/{n_researchers}] 研究者 {researcher_id}: 論文情報を取得中...",
         )
 
         try:
-            publications = get_researcher_publications(researcher_id, headers)
+            publications = get_researcher_publications(
+                researcher_id, headers, progress_callback=update_fetch_progress
+            )
         except requests.RequestException as e:
             st.error(f"研究者 {researcher_id} の論文取得に失敗しました: {e}")
             continue
 
-        for pub in publications:
+        n_pubs = len(publications)
+        for pub_idx, pub in enumerate(publications):
+            if n_pubs:
+                ratio = base_ratio + fetch_share + citescore_share * (pub_idx / n_pubs)
+                progress_bar.progress(
+                    min(ratio, 1.0),
+                    text=f"[{idx + 1}/{n_researchers}] 研究者 {researcher_id}: CiteScore取得中 ({pub_idx + 1}/{n_pubs})",
+                )
             source_id = pub["source_id"]
             if source_id and source_id != "N/A":
                 cs = get_journal_citescore(source_id, headers, citescore_cache)
