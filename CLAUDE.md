@@ -11,6 +11,10 @@
 - 個人キー（Elsevier Developer Portalで無料取得）のみ対応
 - InstTokenは削除済み（著者名取得廃止により不要になった）
 
+## h-index
+- 取得した論文の被引用数から計算（追加API不要）
+- Scopusには直近10年のみで算出するh-indexもあるが、本ツールでは全期間版のみ実装
+
 ## 今後の課題
 
 ### FWCI (Field Weighted Citation Impact)
