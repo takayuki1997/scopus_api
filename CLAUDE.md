@@ -9,7 +9,12 @@
 
 ## APIキー
 - 個人キー（Elsevier Developer Portalで無料取得）のみ対応
-- InstTokenは削除済み（著者名取得廃止により不要になった）
+- 個人キーでも Scopus Search API の `view=COMPLETE` が利用可能（2026-04-21 検証済み）
+
+## 著者情報
+- Scopus Search API の `view=COMPLETE` で全著者を一括取得（追加API不要）
+- `author[].authname` を `, ` 区切りで結合して表示（例: "Hu D., Mao L., ..."）
+- COMPLETE view では `authid`（Author ID）、`afid`（所属機関ID）、アブストラクト、キーワード等も取得可能だが現状は authname のみ利用
 
 ## h-index
 - 取得した論文の被引用数から計算（追加API不要）
