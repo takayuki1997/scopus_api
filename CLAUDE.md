@@ -20,6 +20,25 @@
 ## h-index
 - 取得した論文の被引用数から計算（追加API不要）
 - Scopusには直近10年のみで算出するh-indexもあるが、本ツールでは全期間版のみ実装
+- 取得上限が1000件あるため、自前計算でも公式値との誤差はほぼゼロ（h-index = N なら N本以上の論文があれば足りる）
+
+## ドキュメント
+- README.md: 日本語の利用解説（デプロイURL・使い方・取得項目・制約・ローカル実行手順）
+- LICENSE: MIT License（Copyright 2026 Takayuki Sato）
+
+## ライブラリ選定
+
+### pybliometrics は採用しない
+Scopus APIのPythonラッパーとして [pybliometrics](https://pybliometrics.readthedocs.io/) があるが、本プロジェクトでは採用しない。
+
+採用しない理由:
+- **Streamlit Cloudとの相性が悪い**: pybliometricsはデフォルトで `~/.cache/pybliometrics/` にレスポンスをディスクキャッシュする設計だが、Streamlit Cloudのファイルシステムは揮発的でキャッシュの恩恵がない
+- **APIキー管理モデルが合わない**: pybliometricsはグローバルなconfigファイル (`pybliometrics.cfg`) にAPIキーを保存する設計。本ツールはユーザごとに異なるキーをブラウザから受け取るマルチユーザ運用なので噛み合わない
+- **InstToken制約は変わらない**: 全著者取得などの制約はライブラリを変えても解決しない
+
+唯一のメリットは `AuthorRetrieval` で公式h-indexが取れること。ただし上記の通り自前計算で誤差がほぼないため、メリットが薄い。
+
+個人ローカル利用ならキャッシュが効くので有効だが、本ツールの想定用途（学内研究者への配布）では現状の `requests` 直叩きで十分。
 
 ## 今後の課題
 
