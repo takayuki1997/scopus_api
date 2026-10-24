@@ -135,10 +135,21 @@ raw_input = st.text_area(
     help="Scopus Author IDは [Scopusの著者検索](https://www.scopus.com/pages/home#author) で調べられます",
 )
 
+use_openalex = st.checkbox(
+    "OpenAlex から論文ごとの FWCI・被引用パーセンタイルも取得する",
+    value=True,
+    help=(
+        "OpenAlex（無料の書誌データベース）に DOI で問い合わせます。"
+        "Scopus/SciVal の FWCI とは母集団が異なるため値は一致しません。DOI の無い論文は空欄になります"
+    ),
+)
+
 # --- 定数 ---
 BASE_URL = "https://api.elsevier.com/content/search/scopus"
 SERIAL_TITLE_URL = "https://api.elsevier.com/content/serial/title"
 AUTHOR_URL = "https://api.elsevier.com/content/author/author_id"
+OPENALEX_WORKS_URL = "https://api.openalex.org/works"
+OPENALEX_MAILTO = "takayuki1997@gmail.com"  # polite pool 用（OpenAlex 推奨）
 
 
 # --- 列の説明（テーブル見出しの ? アイコンにマウスオーバーで表示） ---
@@ -159,10 +170,19 @@ COLUMN_HELP = {
     "掲載誌": "掲載ジャーナル名",
     "発行年": "出版年（Scopus の coverDate の年）",
     "パーセンタイル（発行年）": (
-        "発行年時点の掲載誌 CiteScore パーセンタイル（主分野）。"
+        "発行年時点の掲載誌 CiteScore パーセンタイル。掲載誌が複数の ASJC 分野に属する場合は最も高い値。"
         "高いほど上位で、例えば 90 なら分野内の上位 10% のジャーナルです"
     ),
     "被引用数": "Scopus 上の被引用数（取得時点）",
+    "FWCI（OpenAlex）": (
+        "Field Weighted Citation Impact。同じ分野・出版年・文献タイプの論文の平均被引用数を 1 としたときの比。"
+        "OpenAlex 算出のため Scopus/SciVal の FWCI とは母集団が異なり、値は一致しません"
+    ),
+    "被引用パーセンタイル（OpenAlex）": (
+        "同じ分野・出版年の論文の中での被引用数の順位（0〜100、高いほど上位）。OpenAlex 算出"
+    ),
+    "分野（FWCI）": "OpenAlex が FWCI の算出に用いた分野（主トピックの subfield）",
+    "分野（CiteScore）": "掲載誌の ASJC 分野のうち、パーセンタイルが最も高い分野（Scopus の表示と同じ基準）",
     "CiteScore": (
         "発行年時点の掲載誌 CiteScore。"
         "直近 4 年間に掲載された論文 1 本あたりの平均被引用数です"
@@ -174,6 +194,24 @@ COLUMN_HELP = {
 
 
 # --- 関数定義 ---
+
+
+def to_int_or_blank(value):
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return ""
+
+
+def to_num_or_none(value):
+    """表示用: 数値列は数値か None に統一する（文字列が混ざると pyarrow 変換で型が崩れる）。"""
+    if value is None or value == "":
+        return None
+    try:
+        f = float(value)
+    except (TypeError, ValueError):
+        return None
+    return int(f) if f.is_integer() else f
 
 
 def get_journal_citescore(source_id: str, headers: dict, cache: dict) -> dict:
@@ -192,6 +230,9 @@ def get_journal_citescore(source_id: str, headers: dict, cache: dict) -> dict:
             cache[source_id] = {}
             return {}
 
+        subject_names = {
+            sa.get("@code"): sa.get("$", "") for sa in entries[0].get("subject-area", []) if sa.get("@code")
+        }
         cs_info = entries[0].get("citeScoreYearInfoList", {})
         result = {
             "current_citescore": cs_info.get("citeScoreCurrentMetric"),
@@ -207,9 +248,20 @@ def get_journal_citescore(source_id: str, headers: dict, cache: dict) -> dict:
                 if cite_info:
                     info = cite_info[0]
                     subject_ranks = info.get("citeScoreSubjectRank", [])
+                    # 分野（ASJC）ごとにパーセンタイルがあるので、Scopus の表示と同じく最高値を採用する
+                    best = None
+                    for sr in subject_ranks:
+                        pct = to_int_or_blank(sr.get("percentile"))
+                        if pct != "" and (best is None or pct > best[0]):
+                            best = (pct, subject_names.get(sr.get("subjectCode"), sr.get("subjectCode", "")))
                     result["years"][year] = {
                         "citescore": info.get("citeScore"),
-                        "percentile": subject_ranks[0].get("percentile") if subject_ranks else None,
+                        "percentile": best[0] if best else None,
+                        "subject": best[1] if best else "",
+                        "all_subjects": "; ".join(
+                            f"{subject_names.get(sr.get('subjectCode'), sr.get('subjectCode', ''))} {sr.get('percentile', '')}"
+                            for sr in subject_ranks
+                        ),
                         "status": status,
                     }
         cache[source_id] = result
@@ -316,11 +368,58 @@ def get_author_metrics(researcher_id: str, headers: dict) -> dict:
         return {}
 
 
-def to_int_or_blank(value):
-    try:
-        return int(value)
-    except (TypeError, ValueError):
-        return ""
+def _openalex_metrics_from_work(work: dict) -> dict:
+    cnp = work.get("citation_normalized_percentile") or {}
+    pct = cnp.get("value")
+    topic = work.get("primary_topic") or {}
+    return {
+        "fwci": round(work["fwci"], 2) if isinstance(work.get("fwci"), (int, float)) else "",
+        "oa_percentile": round(pct * 100, 1) if isinstance(pct, (int, float)) else "",
+        "oa_field": (topic.get("subfield") or {}).get("display_name", ""),
+    }
+
+
+def get_openalex_metrics(dois: list[str], progress_callback=None) -> dict[str, dict]:
+    """OpenAlex から論文ごとの FWCI・被引用パーセンタイル・分野を DOI で取得する。
+
+    50 件ずつまとめて問い合わせ、見つからなかった DOI だけ個別に再問い合わせする。
+    戻り値のキーは小文字化した DOI。
+    """
+    results: dict[str, dict] = {}
+    targets = sorted({d.strip().lower() for d in dois if d and d.strip()})
+    if not targets:
+        return results
+    common = {"select": "doi,fwci,citation_normalized_percentile,primary_topic", "mailto": OPENALEX_MAILTO}
+    batch_size = 50
+    for i in range(0, len(targets), batch_size):
+        batch = targets[i:i + batch_size]
+        safe = [d for d in batch if "," not in d and "|" not in d]
+        if safe:
+            try:
+                resp = requests.get(
+                    OPENALEX_WORKS_URL,
+                    params={**common, "filter": "doi:" + "|".join(safe), "per-page": batch_size},
+                    timeout=30,
+                )
+                resp.raise_for_status()
+                for work in resp.json().get("results", []):
+                    doi = (work.get("doi") or "").replace("https://doi.org/", "").lower()
+                    if doi:
+                        results[doi] = _openalex_metrics_from_work(work)
+            except (requests.RequestException, ValueError):
+                pass
+        for doi in batch:
+            if doi in results:
+                continue
+            try:
+                resp = requests.get(f"{OPENALEX_WORKS_URL}/doi:{doi}", params=common, timeout=30)
+                if resp.status_code == 200:
+                    results[doi] = _openalex_metrics_from_work(resp.json())
+            except (requests.RequestException, ValueError):
+                pass
+        if progress_callback:
+            progress_callback(min(i + batch_size, len(targets)), len(targets))
+    return results
 
 
 # --- 実行ボタン ---
@@ -399,16 +498,34 @@ if st.button("論文情報を取得", type="primary"):  # テーマカラー（�
                         year_data = years[pub_year]
                         pub["pub_year_citescore"] = year_data.get("citescore", "")
                         pub["pub_year_percentile"] = year_data.get("percentile", "")
+                        pub["citescore_subject"] = year_data.get("subject", "")
 
             pub["researcher_id"] = researcher_id
             pub["author_url"] = f"https://www.scopus.com/authid/detail.uri?authorId={researcher_id}"
             all_publications.append(pub)
 
-    progress_bar.progress(1.0, text="完了！")
-
     if not all_publications:
+        progress_bar.progress(1.0, text="完了")
         st.warning("論文が見つかりませんでした。")
         st.stop()
+
+    # --- OpenAlex（FWCI 等）: 全研究者分をまとめて DOI で問い合わせ ---
+    if use_openalex:
+        dois = [(pub.get("doi_url", "") or "").replace("https://doi.org/", "") for pub in all_publications]
+
+        def update_oa_progress(done: int, total: int):
+            progress_bar.progress(1.0, text=f"OpenAlex から FWCI を取得中 ({done}/{total})")
+
+        progress_bar.progress(1.0, text="OpenAlex から FWCI を取得中...")
+        oa = get_openalex_metrics(dois, progress_callback=update_oa_progress)
+        for pub in all_publications:
+            doi = (pub.get("doi_url", "") or "").replace("https://doi.org/", "").lower()
+            m = oa.get(doi, {})
+            pub["fwci"] = m.get("fwci", "")
+            pub["oa_percentile"] = m.get("oa_percentile", "")
+            pub["oa_field"] = m.get("oa_field", "")
+
+    progress_bar.progress(1.0, text="完了")
 
     st.success(f"合計 {len(all_publications)} 件の論文を取得しました。")
 
@@ -450,7 +567,7 @@ if st.button("論文情報を取得", type="primary"):  # テーマカラー（�
         rid = pub.get("researcher_id", "")
         row = {
             "Scopus Author ID": pub.get("author_url", ""),
-            "h-index": h_index_for(rid),
+            "h-index": to_num_or_none(h_index_for(rid)),
         }
         row.update({
             "論文タイトル": pub.get("title", ""),
@@ -461,9 +578,13 @@ if st.button("論文情報を取得", type="primary"):  # テーマカラー（�
         row.update({
             "掲載誌": pub.get("source_title", ""),
             "発行年": pub_year,
-            "被引用数": pub.get("citation_count", ""),
-            "パーセンタイル（発行年）": pub.get("pub_year_percentile", ""),
-            "CiteScore": pub.get("pub_year_citescore", ""),
+            "被引用数": to_num_or_none(pub.get("citation_count")),
+            "FWCI（OpenAlex）": to_num_or_none(pub.get("fwci")),
+            "被引用パーセンタイル（OpenAlex）": to_num_or_none(pub.get("oa_percentile")),
+            "分野（FWCI）": pub.get("oa_field", ""),
+            "パーセンタイル（発行年）": to_num_or_none(pub.get("pub_year_percentile")),
+            "CiteScore": to_num_or_none(pub.get("pub_year_citescore")),
+            "分野（CiteScore）": pub.get("citescore_subject", ""),
             "DOIリンク": pub.get("doi_url", ""),
             "Scopusページ": pub.get("scopus_url", ""),
             "ジャーナルページ": pub.get("journal_url", ""),
@@ -486,6 +607,12 @@ if st.button("論文情報を取得", type="primary"):  # テーマカラー（�
             ),
             "CiteScore": st.column_config.NumberColumn("CiteScore", width=50, help=COLUMN_HELP["CiteScore"]),
             "被引用数": st.column_config.NumberColumn("被引用数", width=50, help=COLUMN_HELP["被引用数"]),
+            "FWCI（OpenAlex）": st.column_config.NumberColumn("FWCI（OpenAlex）", width=50, help=COLUMN_HELP["FWCI（OpenAlex）"]),
+            "被引用パーセンタイル（OpenAlex）": st.column_config.NumberColumn(
+                "被引用パーセンタイル（OpenAlex）", width=50, help=COLUMN_HELP["被引用パーセンタイル（OpenAlex）"]
+            ),
+            "分野（FWCI）": st.column_config.TextColumn("分野（FWCI）", width=120, help=COLUMN_HELP["分野（FWCI）"]),
+            "分野（CiteScore）": st.column_config.TextColumn("分野（CiteScore）", width=120, help=COLUMN_HELP["分野（CiteScore）"]),
             "Scopus Author ID": st.column_config.LinkColumn(
                 "Scopus Author ID", width=100, display_text=r"authorId=(\d+)", help=COLUMN_HELP["Scopus Author ID"]
             ),
@@ -509,7 +636,8 @@ if st.button("論文情報を取得", type="primary"):  # テーマカラー（�
             fieldnames.append("著者")
         fieldnames += [
             "掲載誌", "発行年", "被引用数",
-            "パーセンタイル（発行年）", "CiteScore（発行年）",
+            "FWCI（OpenAlex）", "被引用パーセンタイル（OpenAlex）", "分野（FWCI）",
+            "パーセンタイル（発行年）", "CiteScore（発行年）", "分野（CiteScore）",
             "DOIリンク", "Scopusページ", "ジャーナルページ",
         ]
 
@@ -532,7 +660,11 @@ if st.button("論文情報を取得", type="primary"):  # テーマカラー（�
                 "DOIリンク": pub.get("doi_url", ""),
                 "Scopusページ": pub.get("scopus_url", ""),
                 "被引用数": pub.get("citation_count", ""),
+                "FWCI（OpenAlex）": pub.get("fwci", ""),
+                "被引用パーセンタイル（OpenAlex）": pub.get("oa_percentile", ""),
+                "分野（FWCI）": pub.get("oa_field", ""),
                 "CiteScore（発行年）": pub.get("pub_year_citescore", ""),
+                "分野（CiteScore）": pub.get("citescore_subject", ""),
                 "ジャーナルページ": pub.get("journal_url", ""),
             }
             if INST_MODE:

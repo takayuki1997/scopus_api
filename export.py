@@ -86,14 +86,19 @@ def build_excel(
         }
         if inst_mode:
             row["著者"] = pub.get("authors", "")
+            row["著者ID"] = "; ".join((pub.get("author_seq_by_id") or {}).keys())
             row["著者数"] = pub.get("author_count")
         row.update({
             "掲載誌": pub.get("source_title", ""),
             "掲載誌ID": pub.get("source_id", ""),
             "発行年": _to_int(_year_of(pub)),
             "被引用数": _to_int(pub.get("citation_count")),
+            "FWCI（OpenAlex）": _to_float(pub.get("fwci")),
+            "被引用パーセンタイル（OpenAlex）": _to_float(pub.get("oa_percentile")),
+            "分野（FWCI）": pub.get("oa_field", ""),
             "掲載誌パーセンタイル（発行年）": _to_float(pub.get("pub_year_percentile")),
             "掲載誌CiteScore（発行年）": _to_float(pub.get("pub_year_citescore")),
+            "分野（CiteScore）": pub.get("citescore_subject", ""),
             "DOIリンク": pub.get("doi_url", ""),
             "Scopusページ": pub.get("scopus_url", ""),
         })
@@ -132,6 +137,8 @@ def build_excel(
                 "年": _to_int(year),
                 "CiteScore": _to_float(info.get("citescore")),
                 "パーセンタイル": _to_float(info.get("percentile")),
+                "分野（最高パーセンタイル）": info.get("subject", ""),
+                "全分野のパーセンタイル": info.get("all_subjects", ""),
                 "状態": info.get("status", ""),
                 "ジャーナルページ": f"https://www.scopus.com/sourceid/{sid}",
             })

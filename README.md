@@ -35,8 +35,12 @@ SciVal を契約していない研究機関の研究者・URA・事務担当者�
 | 掲載誌 | ジャーナル名 |
 | 発行年 | |
 | 被引用数 | 論文ごとの Scopus 被引用数 |
-| パーセンタイル（発行年） | 掲載誌の発行年時点の CiteScore パーセンタイル |
+| FWCI（OpenAlex） | 論文ごとの Field Weighted Citation Impact。OpenAlex 算出（後述） |
+| 被引用パーセンタイル（OpenAlex） | 同分野・同年の論文の中での被引用順位（0〜100）。OpenAlex 算出 |
+| 分野（FWCI） | OpenAlex が FWCI 算出に用いた分野 |
+| パーセンタイル（発行年） | 掲載誌の発行年時点の CiteScore パーセンタイル。複数分野に属する誌は最高値（Scopus の表示と同じ） |
 | CiteScore（発行年） | 掲載誌の発行年時点の CiteScore |
+| 分野（CiteScore） | 上記パーセンタイルの対象となった ASJC 分野 |
 | DOI / Scopus / ジャーナルページへのリンク | |
 
 テーブルの列見出しにある「?」アイコンにマウスを重ねると、各項目の説明が表示されます。
@@ -53,7 +57,7 @@ Excel の 4 シート:
 | シート | 1 行が表すもの | 主な列 |
 | --- | --- | --- |
 | 研究者 | 研究者 1 人 | Scopus Author ID、氏名（機関モードのみ）、h-index、論文数、被引用数合計 |
-| 論文 | 論文 1 本 | EID、DOI、タイトル、筆頭著者、掲載誌、発行年、被引用数、掲載誌パーセンタイル、掲載誌 CiteScore |
+| 論文 | 論文 1 本 | EID、DOI、タイトル、筆頭著者、著者・著者 ID（機関モード）、掲載誌、発行年、被引用数、FWCI（OpenAlex）、分野、掲載誌パーセンタイル、掲載誌 CiteScore |
 | 研究者_論文 | 研究者と論文の対応 1 つ | Scopus Author ID、EID、著者順位（機関モードのみ） |
 | 掲載誌 | 掲載誌 × 発行年（論文で使われている組のみ） | 掲載誌 ID、年、CiteScore、パーセンタイル |
 
@@ -76,7 +80,7 @@ Elsevier から機関契約に紐づく InstToken を発行してもらうと、
 
 | 項目 | 説明 |
 | --- | --- |
-| 著者 | 全著者（`view=COMPLETE` の `author` 配列）。「Hu D.; Sato T.; …」の形式 |
+| 著者 | 全著者（`view=COMPLETE` の `author` 配列）。「Hu D.; Sato T.; …」の形式。Excel の論文シートには各著者の Scopus Author ID（著者 ID）も同じ順で入る |
 | h-index | Author Retrieval API（`view=METRICS`）の Scopus 公式値に置き換わる（取得できない場合は算出値） |
 
 InstToken には次の制約があります。
@@ -102,7 +106,7 @@ InstToken には次の制約があります。
 - **公開モードは個人 API キーのみ対応**。InstToken（機関契約に紐づくトークン）は他ユーザーへの提供が規約違反となるため、公開インスタンスでは使いません（自分専用の機関アクセスモードについては上記参照）。
 - **公開モードでは著者は筆頭著者のみ表示**。全著者リストの取得 (`view=COMPLETE`) は機関アクセスが必要です。
 - **公開モードの h-index は取得した論文（最大 1000 件）から計算**。1000 件取得できていれば Scopus 公式値との誤差はほぼありません。機関アクセスモードでは公式値を表示します。
-- **FWCI（Field Weighted Citation Impact）は非対応**。FWCI は SciVal API でのみ取得可能で、Scopus API では提供されていません。
+- **Scopus/SciVal の FWCI は取得できません**。SciVal API でのみ提供される指標で、InstToken があっても取れません。代わりに [OpenAlex](https://openalex.org/) が算出する FWCI と被引用パーセンタイルを DOI で取得して表示します（チェックボックスで無効化可）。定義は同じですが母集団と分野分類が異なるため、Scopus 上の FWCI とは値が一致しません。報告書等に使う場合は「OpenAlex 算出」と明記してください。DOI の無い論文は空欄になります。
 
 ## ローカルで実行する場合
 

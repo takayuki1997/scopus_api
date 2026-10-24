@@ -75,5 +75,12 @@ Scopus APIのPythonラッパーとして [pybliometrics](https://pybliometrics.r
 ### FWCI (Field Weighted Citation Impact)
 - Scopus APIでは取得不可。SciVal APIが必要だが、SciValの契約がない。InstTokenがあっても取れない
 - Scopusのブラウザ上では表示されるが、スクレイピングは規約違反
-- CSVに空のFWCI列を追加して手入力する案あり
+- **代替として OpenAlex の FWCI・被引用パーセンタイル・分野（primary_topic.subfield）を実装済み**（`get_openalex_metrics`）
+  - DOI で 50 件ずつまとめて filter 検索し、見つからない DOI は `works/doi:` で個別再問い合わせ。キーは小文字化した DOI
+  - 定義は同じだが母集団・分野分類が OpenAlex 独自なので Scopus の FWCI と値は一致しない。UI・README で「OpenAlex 算出」と明記
+  - チェックボックスで無効化可（既定は有効）。API キー不要、mailto で polite pool
 - 出版から約3年経たないと値が安定しない点にも注意
+
+## CiteScore パーセンタイルの分野
+- 掲載誌は複数の ASJC 分野に属し、分野ごとにパーセンタイルがある（`citeScoreSubjectRank`）。Scopus の表示に合わせて**最高値**を採用し、その分野名を「分野（CiteScore）」として出す（以前は配列先頭の分野を使っていた）
+- 分野名は Serial Title API の `subject-area`（`@code` → `$`）から引く。Excel の掲載誌シートには全分野のパーセンタイルも併記
