@@ -4,6 +4,7 @@ import re
 
 import requests
 import streamlit as st
+from streamlit.errors import StreamlitSecretNotFoundError
 from streamlit_cookies_controller import CookieController
 
 st.set_page_config(page_title="Scopus 論文情報取得ツール", layout="wide")
@@ -11,8 +12,17 @@ st.set_page_config(page_title="Scopus 論文情報取得ツール", layout="wide
 # --- Cookie管理 ---
 cookies = CookieController()
 
+
+def get_secret(name: str, default: str = "") -> str:
+    """st.secrets から値を読む。secrets.toml が存在しない環境でも例外にしない。"""
+    try:
+        return st.secrets.get(name, default) or default
+    except (FileNotFoundError, StreamlitSecretNotFoundError):
+        return default
+
+
 # --- パスワード認証 ---
-APP_PASSWORD = st.secrets.get("APP_PASSWORD", "")
+APP_PASSWORD = get_secret("APP_PASSWORD")
 
 
 def check_auth():
@@ -51,15 +61,32 @@ if not check_auth():
 if not cookies.get("authenticated"):
     cookies.set("authenticated", "true", max_age=365 * 24 * 60 * 60)
 
+# --- 動作モード判定 ---
+# Secrets に API キーと InstToken の両方があれば「機関アクセスモード」。
+# InstToken は発行時に紐づけた API キーとの組でしか効かないため、必ず組で設定する。
+# InstToken はサーバーサイドでのみ使用し、ブラウザ側には一切送らない（Elsevier規約）。
+INST_API_KEY = get_secret("SCOPUS_API_KEY")
+INST_TOKEN = get_secret("SCOPUS_INSTTOKEN")
+INST_MODE = bool(INST_API_KEY and INST_TOKEN)
+
 col_title, col_settings = st.columns([8, 1])
 with col_title:
     st.title("Scopus 論文情報取得ツール")
-st.caption("研究者のScopus Author IDから論文情報とCiteScoreパーセンタイルを取得します")
+if INST_MODE:
+    st.caption(
+        "研究者のScopus Author IDから論文情報とCiteScoreパーセンタイルを取得します  \n"
+        "🏛️ 機関アクセスモード：全著者とScopus公式h-indexも取得します"
+    )
+else:
+    st.caption("研究者のScopus Author IDから論文情報とCiteScoreパーセンタイルを取得します")
 
 # --- APIキー入力 ---
-saved_api_key = cookies.get("scopus_api_key") or ""
-
-if saved_api_key:
+if INST_MODE:
+    # 機関アクセスモード: Secrets のキーを使う（入力欄は出さず、Cookieにも保存しない）
+    api_key = INST_API_KEY
+    saved_api_key = api_key
+elif cookies.get("scopus_api_key"):
+    saved_api_key = cookies.get("scopus_api_key")
     # APIキー入力済み → ポップアップに収める
     with col_settings:
         st.write("")  # タイトルとの高さ合わせ
@@ -75,6 +102,7 @@ if saved_api_key:
             )
 else:
     # APIキー未入力 → 直接表示して入力を促す
+    saved_api_key = ""
     api_key = st.text_input(
         "Scopus APIキー",
         type="password",
@@ -108,6 +136,7 @@ raw_input = st.text_area(
 # --- 定数 ---
 BASE_URL = "https://api.elsevier.com/content/search/scopus"
 SERIAL_TITLE_URL = "https://api.elsevier.com/content/serial/title"
+AUTHOR_URL = "https://api.elsevier.com/content/author/author_id"
 
 
 # --- 関数定義 ---
@@ -162,7 +191,13 @@ def get_researcher_publications(
     headers: dict,
     max_results: int = 1000,
     progress_callback=None,
+    view: str = "STANDARD",
 ) -> list[dict]:
+    """Scopus Search API で論文一覧を取得する。
+
+    view="COMPLETE" は機関アクセスが必要だが、全著者配列（author）が返る。
+    どちらのビューでも count の上限は25件/リクエストに揃えてある。
+    """
     results = []
     start = 0
     count_per_request = 25
@@ -174,6 +209,7 @@ def get_researcher_publications(
             "count": min(count_per_request, max_results - start),
             "start": start,
             "sort": "-coverDate",
+            "view": view,
         }
         resp = requests.get(BASE_URL, headers=headers, params=params, timeout=30)
         resp.raise_for_status()
@@ -193,9 +229,12 @@ def get_researcher_publications(
             # EIDから数字部分を抽出（例: "2-s2.0-84885457192" → "84885457192"）
             eid_num = eid.split("-")[-1] if eid else ""
             source_id = entry.get("source-id", "")
+            # 全著者（COMPLETEビューのみ返る。STANDARDでは空）
+            authors = entry.get("author") or []
             results.append({
                 "title": entry.get("dc:title", "N/A"),
                 "first_author": entry.get("dc:creator", ""),
+                "authors": "; ".join(a.get("authname", "") for a in authors if a.get("authname")),
                 "source_title": entry.get("prism:publicationName", "N/A"),
                 "source_id": source_id,
                 "journal_url": f"https://www.scopus.com/sourceid/{source_id}" if source_id else "",
@@ -213,10 +252,42 @@ def get_researcher_publications(
     return results
 
 
+def get_author_metrics(researcher_id: str, headers: dict) -> dict:
+    """Author Retrieval API (view=METRICS) から Scopus 公式の指標を取得する。
+
+    機関アクセス（InstToken）が必要。失敗時は空dictを返す。
+    """
+    try:
+        resp = requests.get(
+            f"{AUTHOR_URL}/{researcher_id}",
+            headers=headers,
+            params={"view": "METRICS"},
+            timeout=30,
+        )
+        resp.raise_for_status()
+        data = resp.json().get("author-retrieval-response", [{}])[0]
+        core = data.get("coredata", {})
+        return {
+            "h_index": data.get("h-index", ""),
+            "document_count": core.get("document-count", ""),
+            "cited_by_count": core.get("cited-by-count", ""),
+        }
+    except (requests.RequestException, IndexError, ValueError) as e:
+        st.warning(f"Scopus公式指標の取得エラー (author_id={researcher_id}): {e}")
+        return {}
+
+
+def to_int_or_blank(value):
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return ""
+
+
 # --- 実行ボタン ---
 if st.button("論文情報を取得", type="primary"):  # テーマカラー（オレンジ）
     if not api_key:
-        st.error("サイドバーでScopus APIキーを入力してください。")
+        st.error("Scopus APIキーを入力してください。")
         st.stop()
 
     researcher_ids = [id_.strip() for id_ in re.split(r"[,\n]+", raw_input) if id_.strip()]
@@ -225,8 +296,12 @@ if st.button("論文情報を取得", type="primary"):  # テーマカラー（�
         st.stop()
 
     headers = {"X-ELS-APIKey": api_key, "Accept": "application/json"}
+    if INST_MODE:
+        headers["X-ELS-Insttoken"] = INST_TOKEN
+    search_view = "COMPLETE" if INST_MODE else "STANDARD"
     citescore_cache: dict = {}
     all_publications: list[dict] = []
+    official_metrics: dict[str, dict] = {}  # 機関アクセスモードのみ
 
     progress_bar = st.progress(0, text="論文情報を取得中...")
 
@@ -252,11 +327,16 @@ if st.button("論文情報を取得", type="primary"):  # テーマカラー（�
 
         try:
             publications = get_researcher_publications(
-                researcher_id, headers, progress_callback=update_fetch_progress
+                researcher_id, headers, progress_callback=update_fetch_progress, view=search_view
             )
         except requests.RequestException as e:
             st.error(f"研究者 {researcher_id} の論文取得に失敗しました: {e}")
+            if INST_MODE and getattr(e.response, "status_code", None) == 401:
+                st.error("機関アクセス認証に失敗しました。SecretsのSCOPUS_API_KEYとSCOPUS_INSTTOKENの組、またはInstTokenの有効期限を確認してください。")
             continue
+
+        if INST_MODE:
+            official_metrics[researcher_id] = get_author_metrics(researcher_id, headers)
 
         n_pubs = len(publications)
         for pub_idx, pub in enumerate(publications):
@@ -320,12 +400,20 @@ if st.button("論文情報を取得", type="primary"):  # テーマカラー（�
     for pub in all_publications:
         cover_date = pub.get("cover_date", "")
         pub_year = cover_date[:4] if cover_date and cover_date != "N/A" else ""
-        doi = pub.get("doi_url", "")
-        display_data.append({
+        rid = pub.get("researcher_id", "")
+        row = {
             "Scopus Author ID": pub.get("author_url", ""),
-            "h-index": h_index_by_researcher.get(pub.get("researcher_id", ""), ""),
+            "h-index": h_index_by_researcher.get(rid, ""),
+        }
+        if INST_MODE:
+            row["h-index（Scopus公式）"] = to_int_or_blank(official_metrics.get(rid, {}).get("h_index"))
+        row.update({
             "論文タイトル": pub.get("title", ""),
             "筆頭著者": pub.get("first_author", ""),
+        })
+        if INST_MODE:
+            row["著者"] = pub.get("authors", "")
+        row.update({
             "掲載誌": pub.get("source_title", ""),
             "発行年": pub_year,
             "パーセンタイル（発行年）": pub.get("pub_year_percentile", ""),
@@ -335,15 +423,18 @@ if st.button("論文情報を取得", type="primary"):  # テーマカラー（�
             "Scopusページ": pub.get("scopus_url", ""),
             "ジャーナルページ": pub.get("journal_url", ""),
         })
+        display_data.append(row)
 
     df = pd.DataFrame(display_data)
     st.dataframe(
         df,
-        use_container_width=True,
+        width="stretch",
         column_config={
             "h-index": st.column_config.NumberColumn("h-index", width=50),
+            "h-index（Scopus公式）": st.column_config.NumberColumn("h-index（Scopus公式）", width=50),
             "論文タイトル": st.column_config.TextColumn("論文タイトル", width=200),
             "筆頭著者": st.column_config.TextColumn("筆頭著者", width=100),
+            "著者": st.column_config.TextColumn("著者", width=200),
             "掲載誌": st.column_config.TextColumn("掲載誌", width=160),
             "発行年": st.column_config.TextColumn("発行年", width=50),
             "パーセンタイル（発行年）": st.column_config.NumberColumn("パーセンタイル（発行年）", width=50),
@@ -359,8 +450,14 @@ if st.button("論文情報を取得", type="primary"):  # テーマカラー（�
     # --- CSVダウンロード ---
     @st.fragment
     def download_csv():
-        fieldnames = [
-            "Scopus Author ID", "h-index", "論文タイトル", "筆頭著者", "掲載誌", "発行年", "パーセンタイル（発行年）",
+        fieldnames = ["Scopus Author ID", "h-index"]
+        if INST_MODE:
+            fieldnames.append("h-index（Scopus公式）")
+        fieldnames += ["論文タイトル", "筆頭著者"]
+        if INST_MODE:
+            fieldnames.append("著者")
+        fieldnames += [
+            "掲載誌", "発行年", "パーセンタイル（発行年）",
             "被引用数", "CiteScore（発行年）",
             "DOIリンク", "Scopusページ", "ジャーナルページ",
         ]
@@ -372,9 +469,10 @@ if st.button("論文情報を取得", type="primary"):  # テーマカラー（�
         for pub in all_publications:
             cover_date = pub.get("cover_date", "")
             pub_year = cover_date[:4] if cover_date and cover_date != "N/A" else ""
-            writer.writerow({
-                "Scopus Author ID": pub.get("researcher_id", ""),
-                "h-index": h_index_by_researcher.get(pub.get("researcher_id", ""), ""),
+            rid = pub.get("researcher_id", "")
+            csv_row = {
+                "Scopus Author ID": rid,
+                "h-index": h_index_by_researcher.get(rid, ""),
                 "論文タイトル": pub.get("title", ""),
                 "筆頭著者": pub.get("first_author", ""),
                 "掲載誌": pub.get("source_title", ""),
@@ -385,7 +483,11 @@ if st.button("論文情報を取得", type="primary"):  # テーマカラー（�
                 "被引用数": pub.get("citation_count", ""),
                 "CiteScore（発行年）": pub.get("pub_year_citescore", ""),
                 "ジャーナルページ": pub.get("journal_url", ""),
-            })
+            }
+            if INST_MODE:
+                csv_row["h-index（Scopus公式）"] = to_int_or_blank(official_metrics.get(rid, {}).get("h_index"))
+                csv_row["著者"] = pub.get("authors", "")
+            writer.writerow(csv_row)
 
         st.download_button(
             label="CSVダウンロード",
