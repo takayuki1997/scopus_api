@@ -1,6 +1,7 @@
 """取得結果を正規化した 4 シート入り Excel に変換する。
 
 シート構成（1 行が表すもの）:
+- 取得情報:      取得日時・モード・対象 Author ID・件数・データソース
 - 研究者:        研究者 1 人
 - 論文:          論文 1 本（研究者をまたいで重複排除。一覧性のため掲載誌の指標も併記）
 - 研究者_論文:   「この研究者がこの論文の著者」という対応 1 つ
@@ -8,6 +9,7 @@
 """
 
 import io
+from datetime import datetime
 
 import pandas as pd
 
@@ -37,8 +39,11 @@ def build_excel(
     official_metrics: dict,
     citescore_cache: dict,
     inst_mode: bool,
+    retrieved_at: datetime,
+    use_openalex: bool = True,
 ) -> bytes:
     """all_publications は (研究者, 論文) ごとの行。研究者をまたぐ重複はここで解消する。"""
+    retrieved_date = retrieved_at.strftime("%Y-%m-%d")
 
     # --- 研究者 ---
     researcher_rows = []
@@ -56,6 +61,7 @@ def build_excel(
                 if name:
                     break
         row = {
+            "取得日": retrieved_date,
             "Scopus Author ID": rid,
             "氏名": name,
             "h-index": h_index_by_researcher.get(rid, ""),
@@ -79,6 +85,7 @@ def build_excel(
             continue
         seen_eids.add(key)
         row = {
+            "取得日": retrieved_date,
             "EID": eid,
             "DOI": (pub.get("doi_url", "") or "").replace("https://doi.org/", ""),
             "論文タイトル": pub.get("title", ""),
@@ -143,9 +150,23 @@ def build_excel(
                 "ジャーナルページ": f"https://www.scopus.com/sourceid/{sid}",
             })
 
+    # --- 取得情報 ---
+    info_rows = [
+        {"項目": "取得日時", "値": retrieved_at.strftime("%Y-%m-%d %H:%M (%Z)")},
+        {"項目": "動作モード", "値": "機関アクセスモード" if inst_mode else "公開モード"},
+        {"項目": "対象 Scopus Author ID", "値": ", ".join(rids)},
+        {"項目": "研究者数", "値": len(rids)},
+        {"項目": "論文数（重複なし）", "値": len(paper_rows)},
+        {"項目": "研究者×論文の対応数", "値": len(link_rows)},
+        {"項目": "書誌・被引用数・CiteScore", "値": "Scopus API（Elsevier）"},
+        {"項目": "FWCI・被引用パーセンタイル・分野（FWCI）", "値": "OpenAlex（取得あり）" if use_openalex else "取得なし"},
+        {"項目": "注記", "値": "被引用数・CiteScore・FWCI は取得日時点の値。論文シートの掲載誌指標は掲載誌の値であり論文の評価ではない"},
+    ]
+
     buf = io.BytesIO()
     with pd.ExcelWriter(buf, engine="openpyxl") as writer:
         for sheet, rows in [
+            ("取得情報", info_rows),
             ("研究者", researcher_rows),
             ("論文", paper_rows),
             ("研究者_論文", link_rows),
