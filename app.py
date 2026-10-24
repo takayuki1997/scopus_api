@@ -1,6 +1,8 @@
 import csv
 import io
 import re
+from datetime import datetime
+from zoneinfo import ZoneInfo
 
 import requests
 import streamlit as st
@@ -526,6 +528,7 @@ if st.button("論文情報を取得", type="primary"):  # テーマカラー（�
             pub["oa_field"] = m.get("oa_field", "")
 
     progress_bar.progress(1.0, text="完了")
+    retrieved_at = datetime.now(ZoneInfo("Asia/Tokyo"))
 
     st.success(f"合計 {len(all_publications)} 件の論文を取得しました。")
 
@@ -673,15 +676,17 @@ if st.button("論文情報を取得", type="primary"):  # テーマカラー（�
 
         h_index_display = {rid: h_index_for(rid) for rid in h_index_by_researcher}
         excel_bytes = build_excel(
-            all_publications, h_index_display, official_metrics, citescore_cache, INST_MODE
+            all_publications, h_index_display, official_metrics, citescore_cache, INST_MODE,
+            retrieved_at=retrieved_at, use_openalex=use_openalex,
         )
+        date_tag = retrieved_at.strftime("%Y%m%d")
 
         col_csv, col_xlsx, _ = st.columns([1, 1, 4])
         with col_csv:
             st.download_button(
                 label="CSVダウンロード",
                 data=buf.getvalue(),
-                file_name="publications.csv",
+                file_name=f"publications_{date_tag}.csv",
                 mime="text/csv",
                 help="上の表と同じ列構成。1行 = 研究者 × 論文（共著論文は研究者ごとに行が分かれます）",
             )
@@ -689,7 +694,7 @@ if st.button("論文情報を取得", type="primary"):  # テーマカラー（�
             st.download_button(
                 label="Excelダウンロード（4シート）",
                 data=excel_bytes,
-                file_name="publications.xlsx",
+                file_name=f"publications_{date_tag}.xlsx",
                 mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                 help=(
                     "研究者 / 論文 / 研究者_論文 / 掲載誌 の4シートに分けた形式。"
