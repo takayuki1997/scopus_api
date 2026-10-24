@@ -454,8 +454,8 @@ if st.button("論文情報を取得", type="primary"):  # テーマカラー（�
         row.update({
             "掲載誌": pub.get("source_title", ""),
             "発行年": pub_year,
-            "パーセンタイル（発行年）": pub.get("pub_year_percentile", ""),
             "被引用数": pub.get("citation_count", ""),
+            "パーセンタイル（発行年）": pub.get("pub_year_percentile", ""),
             "CiteScore": pub.get("pub_year_citescore", ""),
             "DOIリンク": pub.get("doi_url", ""),
             "Scopusページ": pub.get("scopus_url", ""),
@@ -501,8 +501,8 @@ if st.button("論文情報を取得", type="primary"):  # テーマカラー（�
         if INST_MODE:
             fieldnames.append("著者")
         fieldnames += [
-            "掲載誌", "発行年", "パーセンタイル（発行年）",
-            "被引用数", "CiteScore（発行年）",
+            "掲載誌", "発行年", "被引用数",
+            "パーセンタイル（発行年）", "CiteScore（発行年）",
             "DOIリンク", "Scopusページ", "ジャーナルページ",
         ]
 
