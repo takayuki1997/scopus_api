@@ -110,17 +110,22 @@ def build_excel(
             row["筆頭著者か"] = "○" if seq == "1" else ("" if seq is None else "")
         link_rows.append(row)
 
-    # --- 掲載誌 × 年 ---
+    # --- 掲載誌 × 年（論文で実際に使われている誌 × 発行年の組だけ） ---
     title_by_source = {}
+    used_pairs = set()
     for pub in all_publications:
         sid = pub.get("source_id", "")
         if sid and sid not in title_by_source:
             title_by_source[sid] = pub.get("source_title", "")
+        if sid and _year_of(pub):
+            used_pairs.add((sid, _year_of(pub)))
     journal_rows = []
     for sid, cs in citescore_cache.items():
         if not cs:
             continue
         for year, info in sorted((cs.get("years") or {}).items()):
+            if (sid, year) not in used_pairs:
+                continue
             journal_rows.append({
                 "掲載誌ID": sid,
                 "掲載誌": title_by_source.get(sid, ""),
