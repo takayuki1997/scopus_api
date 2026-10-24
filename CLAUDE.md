@@ -13,7 +13,7 @@
 | モード | 条件 | APIキー | 追加項目 |
 | --- | --- | --- | --- |
 | 公開モード | `SCOPUS_API_KEY`/`SCOPUS_INSTTOKEN` なし | ユーザー入力（Cookie保存） | なし |
-| 機関アクセスモード | 両方あり | Secretsのキー（入力欄なし、Cookie保存なし） | 全著者、h-index（Scopus公式） |
+| 機関アクセスモード | 両方あり | Secretsのキー（入力欄なし、Cookie保存なし） | 全著者。h-indexはScopus公式値に置き換わる |
 
 設計方針:
 - **公開インスタンスには InstToken を置かない**。モード分岐のバグで他ユーザーに機関アクセスを提供してしまうと規約違反になるため、安全性はロジックではなく「Secretsが存在しない」ことで構造的に担保する
@@ -37,7 +37,8 @@
 - 取得した論文の被引用数から計算（追加API不要）
 - Scopusには直近10年のみで算出するh-indexもあるが、本ツールでは全期間版のみ実装
 - 取得上限が1000件あるため、自前計算でも公式値との誤差はほぼゼロ（h-index = N なら N本以上の論文があれば足りる）
-- 機関アクセスモードでは Author Retrieval API（`view=METRICS`）の公式値を「h-index（Scopus公式）」列として併記。デフォルトビューでは h-index が返らないので `view=METRICS` 指定が必須
+- 機関アクセスモードでは Author Retrieval API（`view=METRICS`）の公式値を同じ「h-index」列に表示（取れなければ算出値にフォールバック）。列を2つ並べると混乱するので1列に統一した。デフォルトビューでは h-index が返らないので `view=METRICS` 指定が必須
+- 列見出しの説明は `COLUMN_HELP`（column_config の `help`）で一元管理。h-index の説明文はモードで切り替わる
 
 ## ドキュメント
 - README.md: 日本語の利用解説（デプロイURL・使い方・取得項目・制約・ローカル実行手順）

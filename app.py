@@ -139,6 +139,38 @@ SERIAL_TITLE_URL = "https://api.elsevier.com/content/serial/title"
 AUTHOR_URL = "https://api.elsevier.com/content/author/author_id"
 
 
+# --- 列の説明（テーブル見出しの ? アイコンにマウスオーバーで表示） ---
+H_INDEX_HELP_INST = (
+    "Scopus 公式の h-index（Author Retrieval API）。"
+    "取得できなかった場合は取得した論文の被引用数から算出した値を表示します。"
+)
+H_INDEX_HELP_PUBLIC = (
+    "取得した論文（最大 1000 件）の被引用数から算出した全期間の h-index。"
+    "h 本以上の論文がそれぞれ h 回以上引用されているときの最大の h。"
+)
+COLUMN_HELP = {
+    "Scopus Author ID": "Scopus の著者ページへのリンク。クリックで Scopus を開きます。",
+    "h-index": H_INDEX_HELP_INST if INST_MODE else H_INDEX_HELP_PUBLIC,
+    "論文タイトル": "論文のタイトル。",
+    "筆頭著者": "筆頭著者（Scopus の dc:creator）。例: Sato T.",
+    "著者": "全著者を Scopus の登録順に「;」区切りで表示します。",
+    "掲載誌": "掲載ジャーナル名。",
+    "発行年": "出版年（Scopus の coverDate の年）。",
+    "パーセンタイル（発行年）": (
+        "発行年時点の掲載誌 CiteScore パーセンタイル（主分野）。"
+        "高いほど上位で、例えば 90 なら分野内の上位 10% のジャーナルです。"
+    ),
+    "被引用数": "Scopus 上の被引用数（取得時点）。",
+    "CiteScore": (
+        "発行年時点の掲載誌 CiteScore。"
+        "直近 4 年間に掲載された論文 1 本あたりの平均被引用数です。"
+    ),
+    "DOIリンク": "DOI。クリックで出版社のページを開きます。",
+    "Scopusページ": "Scopus の論文ページへのリンク。",
+    "ジャーナルページ": "Scopus のジャーナル（ソース）ページへのリンク。",
+}
+
+
 # --- 関数定義 ---
 
 
@@ -393,6 +425,14 @@ if st.button("論文情報を取得", type="primary"):  # テーマカラー（�
                 break
         h_index_by_researcher[rid] = h
 
+    def h_index_for(rid: str):
+        """表示用 h-index。機関モードは Scopus 公式値を優先し、取れなければ算出値。"""
+        if INST_MODE:
+            official = to_int_or_blank(official_metrics.get(rid, {}).get("h_index"))
+            if official != "":
+                return official
+        return h_index_by_researcher.get(rid, "")
+
     # --- テーブル表示（ブラウザ用：厳選した列のみ） ---
     import pandas as pd
 
@@ -403,10 +443,8 @@ if st.button("論文情報を取得", type="primary"):  # テーマカラー（�
         rid = pub.get("researcher_id", "")
         row = {
             "Scopus Author ID": pub.get("author_url", ""),
-            "h-index": h_index_by_researcher.get(rid, ""),
+            "h-index": h_index_for(rid),
         }
-        if INST_MODE:
-            row["h-index（Scopus公式）"] = to_int_or_blank(official_metrics.get(rid, {}).get("h_index"))
         row.update({
             "論文タイトル": pub.get("title", ""),
             "筆頭著者": pub.get("first_author", ""),
@@ -430,30 +468,36 @@ if st.button("論文情報を取得", type="primary"):  # テーマカラー（�
         df,
         width="stretch",
         column_config={
-            "h-index": st.column_config.NumberColumn("h-index", width=50),
-            "h-index（Scopus公式）": st.column_config.NumberColumn("h-index（Scopus公式）", width=50),
-            "論文タイトル": st.column_config.TextColumn("論文タイトル", width=200),
-            "筆頭著者": st.column_config.TextColumn("筆頭著者", width=100),
-            "著者": st.column_config.TextColumn("著者", width=200),
-            "掲載誌": st.column_config.TextColumn("掲載誌", width=160),
-            "発行年": st.column_config.TextColumn("発行年", width=50),
-            "パーセンタイル（発行年）": st.column_config.NumberColumn("パーセンタイル（発行年）", width=50),
-            "CiteScore": st.column_config.NumberColumn("CiteScore", width=50),
-            "被引用数": st.column_config.NumberColumn("被引用数", width=50),
-            "Scopus Author ID": st.column_config.LinkColumn("Scopus Author ID", width=100, display_text=r"authorId=(\d+)"),
-            "DOIリンク": st.column_config.LinkColumn("DOI", width=100, display_text=r"doi\.org/(.+)"),
-            "Scopusページ": st.column_config.LinkColumn("Scopus", width=100, display_text=r"publications/(\d+)"),
-            "ジャーナルページ": st.column_config.LinkColumn("Journal", width=100, display_text=r"sourceid/(\d+)"),
+            "h-index": st.column_config.NumberColumn("h-index", width=50, help=COLUMN_HELP["h-index"]),
+            "論文タイトル": st.column_config.TextColumn("論文タイトル", width=200, help=COLUMN_HELP["論文タイトル"]),
+            "筆頭著者": st.column_config.TextColumn("筆頭著者", width=100, help=COLUMN_HELP["筆頭著者"]),
+            "著者": st.column_config.TextColumn("著者", width=200, help=COLUMN_HELP["著者"]),
+            "掲載誌": st.column_config.TextColumn("掲載誌", width=160, help=COLUMN_HELP["掲載誌"]),
+            "発行年": st.column_config.TextColumn("発行年", width=50, help=COLUMN_HELP["発行年"]),
+            "パーセンタイル（発行年）": st.column_config.NumberColumn(
+                "パーセンタイル（発行年）", width=50, help=COLUMN_HELP["パーセンタイル（発行年）"]
+            ),
+            "CiteScore": st.column_config.NumberColumn("CiteScore", width=50, help=COLUMN_HELP["CiteScore"]),
+            "被引用数": st.column_config.NumberColumn("被引用数", width=50, help=COLUMN_HELP["被引用数"]),
+            "Scopus Author ID": st.column_config.LinkColumn(
+                "Scopus Author ID", width=100, display_text=r"authorId=(\d+)", help=COLUMN_HELP["Scopus Author ID"]
+            ),
+            "DOIリンク": st.column_config.LinkColumn(
+                "DOI", width=100, display_text=r"doi\.org/(.+)", help=COLUMN_HELP["DOIリンク"]
+            ),
+            "Scopusページ": st.column_config.LinkColumn(
+                "Scopus", width=100, display_text=r"publications/(\d+)", help=COLUMN_HELP["Scopusページ"]
+            ),
+            "ジャーナルページ": st.column_config.LinkColumn(
+                "Journal", width=100, display_text=r"sourceid/(\d+)", help=COLUMN_HELP["ジャーナルページ"]
+            ),
         },
     )
 
     # --- CSVダウンロード ---
     @st.fragment
     def download_csv():
-        fieldnames = ["Scopus Author ID", "h-index"]
-        if INST_MODE:
-            fieldnames.append("h-index（Scopus公式）")
-        fieldnames += ["論文タイトル", "筆頭著者"]
+        fieldnames = ["Scopus Author ID", "h-index", "論文タイトル", "筆頭著者"]
         if INST_MODE:
             fieldnames.append("著者")
         fieldnames += [
@@ -472,7 +516,7 @@ if st.button("論文情報を取得", type="primary"):  # テーマカラー（�
             rid = pub.get("researcher_id", "")
             csv_row = {
                 "Scopus Author ID": rid,
-                "h-index": h_index_by_researcher.get(rid, ""),
+                "h-index": h_index_for(rid),
                 "論文タイトル": pub.get("title", ""),
                 "筆頭著者": pub.get("first_author", ""),
                 "掲載誌": pub.get("source_title", ""),
@@ -485,7 +529,6 @@ if st.button("論文情報を取得", type="primary"):  # テーマカラー（�
                 "ジャーナルページ": pub.get("journal_url", ""),
             }
             if INST_MODE:
-                csv_row["h-index（Scopus公式）"] = to_int_or_blank(official_metrics.get(rid, {}).get("h_index"))
                 csv_row["著者"] = pub.get("authors", "")
             writer.writerow(csv_row)
 

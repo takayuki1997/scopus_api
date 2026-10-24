@@ -29,7 +29,7 @@ SciVal を契約していない研究機関の研究者・URA・事務担当者�
 | 項目 | 説明 |
 | --- | --- |
 | Scopus Author ID | 著者ページへのリンク |
-| h-index | 取得した論文の被引用数から算出（全期間） |
+| h-index | 全期間の h-index。公開モードは取得した論文の被引用数から算出、機関アクセスモードは Scopus 公式値 |
 | 論文タイトル | |
 | 筆頭著者 | `dc:creator`（例: "Sato T."） |
 | 掲載誌 | ジャーナル名 |
@@ -38,6 +38,8 @@ SciVal を契約していない研究機関の研究者・URA・事務担当者�
 | 被引用数 | |
 | CiteScore（発行年） | |
 | DOI / Scopus / ジャーナルページへのリンク | |
+
+テーブルの列見出しにある「?」アイコンにマウスを重ねると、各項目の説明が表示されます。
 
 結果はテーブル表示に加え、CSV（Excel で文字化けしない UTF-8 BOM 付き）でダウンロードできます。
 
@@ -48,7 +50,7 @@ SciVal を契約していない研究機関の研究者・URA・事務担当者�
 | モード | 条件 | API キー | 追加で取得できる項目 |
 | --- | --- | --- | --- |
 | 公開モード | Secrets に `SCOPUS_API_KEY` / `SCOPUS_INSTTOKEN` がない | 各ユーザーが入力 | なし（上記の項目のみ） |
-| 機関アクセスモード | Secrets に `SCOPUS_API_KEY` と `SCOPUS_INSTTOKEN` の両方がある | Secrets のキーを使用（入力欄なし） | 全著者、h-index（Scopus 公式） |
+| 機関アクセスモード | Secrets に `SCOPUS_API_KEY` と `SCOPUS_INSTTOKEN` の両方がある | Secrets のキーを使用（入力欄なし） | 全著者。h-index は Scopus 公式値になる |
 
 公開デプロイ（上記 URL）は公開モードです。
 
@@ -59,7 +61,7 @@ Elsevier から機関契約に紐づく InstToken を発行してもらうと、
 | 項目 | 説明 |
 | --- | --- |
 | 著者 | 全著者（`view=COMPLETE` の `author` 配列）。「Hu D.; Sato T.; …」の形式 |
-| h-index（Scopus 公式） | Author Retrieval API（`view=METRICS`）から取得した公式値 |
+| h-index | Author Retrieval API（`view=METRICS`）の Scopus 公式値に置き換わる（取得できない場合は算出値） |
 
 InstToken には次の制約があります。
 
@@ -83,7 +85,7 @@ InstToken には次の制約があります。
 
 - **公開モードは個人 API キーのみ対応**。InstToken（機関契約に紐づくトークン）は他ユーザーへの提供が規約違反となるため、公開インスタンスでは使いません（自分専用の機関アクセスモードについては上記参照）。
 - **公開モードでは著者は筆頭著者のみ表示**。全著者リストの取得 (`view=COMPLETE`) は機関アクセスが必要です。
-- **h-index は取得した論文（最大 1000 件）から計算**。1000 件取得できていれば Scopus 公式値との誤差はほぼありません。機関アクセスモードでは公式値も並べて表示します。
+- **公開モードの h-index は取得した論文（最大 1000 件）から計算**。1000 件取得できていれば Scopus 公式値との誤差はほぼありません。機関アクセスモードでは公式値を表示します。
 - **FWCI（Field Weighted Citation Impact）は非対応**。FWCI は SciVal API でのみ取得可能で、Scopus API では提供されていません。
 
 ## ローカルで実行する場合
