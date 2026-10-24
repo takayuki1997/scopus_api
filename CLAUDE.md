@@ -40,6 +40,14 @@
 - 機関アクセスモードでは Author Retrieval API（`view=METRICS`）の公式値を同じ「h-index」列に表示（取れなければ算出値にフォールバック）。列を2つ並べると混乱するので1列に統一した。デフォルトビューでは h-index が返らないので `view=METRICS` 指定が必須
 - 列見出しの説明は `COLUMN_HELP`（column_config の `help`）で一元管理。h-index の説明文はモードで切り替わる
 
+## 出力形式
+- CSV: テーブルと同じ平らな表（1行 = 研究者 × 論文）。一覧用
+- Excel（`export.py` の `build_excel`）: 研究者 / 論文 / 研究者_論文 / 掲載誌 の4シートに正規化。学部・コース集計用
+  - 論文シートは EID で重複排除（共著論文は1本）。一覧性のため掲載誌の指標を「掲載誌パーセンタイル」「掲載誌CiteScore」の列名で併記（論文の評価ではない旨を列名で示す）
+  - 氏名・著者順位は機関モードのみ（COMPLETEビューの author 配列から researcher_id に一致する著者を引く）
+  - 将来、別途作る教員リスト（Author ID / 学部 / コース）と Author ID で結合して集計する想定
+- `export.py` は Streamlit 非依存の純関数なので合成データで単体テスト可能
+
 ## ドキュメント
 - README.md: 日本語の利用解説（デプロイURL・使い方・取得項目・制約・ローカル実行手順）
 - LICENSE: MIT License（Copyright 2026 Takayuki Sato）

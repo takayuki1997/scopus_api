@@ -7,6 +7,8 @@ import streamlit as st
 from streamlit.errors import StreamlitSecretNotFoundError
 from streamlit_cookies_controller import CookieController
 
+from export import build_excel
+
 st.set_page_config(page_title="Scopus 論文情報取得ツール", layout="wide")
 
 # --- Cookie管理 ---
@@ -263,10 +265,15 @@ def get_researcher_publications(
             source_id = entry.get("source-id", "")
             # 全著者（COMPLETEビューのみ返る。STANDARDでは空）
             authors = entry.get("author") or []
+            author_count = (entry.get("author-count") or {}).get("$")
             results.append({
+                "eid": eid,
                 "title": entry.get("dc:title", "N/A"),
                 "first_author": entry.get("dc:creator", ""),
                 "authors": "; ".join(a.get("authname", "") for a in authors if a.get("authname")),
+                "author_count": int(author_count) if author_count and author_count.isdigit() else (len(authors) or None),
+                "author_seq_by_id": {a.get("authid"): a.get("@seq") for a in authors if a.get("authid")},
+                "author_name_by_id": {a.get("authid"): a.get("authname", "") for a in authors if a.get("authid")},
                 "source_title": entry.get("prism:publicationName", "N/A"),
                 "source_id": source_id,
                 "journal_url": f"https://www.scopus.com/sourceid/{source_id}" if source_id else "",
@@ -494,9 +501,9 @@ if st.button("論文情報を取得", type="primary"):  # テーマカラー（�
         },
     )
 
-    # --- CSVダウンロード ---
+    # --- ダウンロード（CSV: 一覧用の平らな表 / Excel: 4シートに正規化） ---
     @st.fragment
-    def download_csv():
+    def download_section():
         fieldnames = ["Scopus Author ID", "h-index", "論文タイトル", "筆頭著者"]
         if INST_MODE:
             fieldnames.append("著者")
@@ -532,11 +539,30 @@ if st.button("論文情報を取得", type="primary"):  # テーマカラー（�
                 csv_row["著者"] = pub.get("authors", "")
             writer.writerow(csv_row)
 
-        st.download_button(
-            label="CSVダウンロード",
-            data=buf.getvalue(),
-            file_name="publications.csv",
-            mime="text/csv",
+        h_index_display = {rid: h_index_for(rid) for rid in h_index_by_researcher}
+        excel_bytes = build_excel(
+            all_publications, h_index_display, official_metrics, citescore_cache, INST_MODE
         )
 
-    download_csv()
+        col_csv, col_xlsx, _ = st.columns([1, 1, 4])
+        with col_csv:
+            st.download_button(
+                label="CSVダウンロード",
+                data=buf.getvalue(),
+                file_name="publications.csv",
+                mime="text/csv",
+                help="上の表と同じ列構成。1行 = 研究者 × 論文（共著論文は研究者ごとに行が分かれます）",
+            )
+        with col_xlsx:
+            st.download_button(
+                label="Excelダウンロード（4シート）",
+                data=excel_bytes,
+                file_name="publications.xlsx",
+                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                help=(
+                    "研究者 / 論文 / 研究者_論文 / 掲載誌 の4シートに分けた形式。"
+                    "論文は重複なし、研究者の値は1回だけ現れるので、学部やコース単位の集計に向きます"
+                ),
+            )
+
+    download_section()
